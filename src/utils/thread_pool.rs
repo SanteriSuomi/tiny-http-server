@@ -4,46 +4,68 @@ use std::thread;
 
 // A thread pool that executes jobs in parallel threads.
 pub struct ThreadPool {
-    _workers: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
 }
 
 impl ThreadPool {
     pub fn new(size: usize) -> ThreadPool {
         assert!(size > 0);
-        let mut _workers = Vec::with_capacity(size);
+        let mut workers = Vec::with_capacity(size);
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
         for i in 0..size {
-            _workers.push(Worker::new(i, Arc::clone(&receiver)));
+            workers.push(Worker::new(i, Arc::clone(&receiver)));
         }
-        ThreadPool { _workers, sender }
+        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
     }
 
     pub fn execute<F>(&mut self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
-        self.sender.send(Box::new(f)).unwrap();
+        self.sender.as_ref().unwrap().send(Box::new(f)).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        drop(self.sender.take().unwrap());
+        for worker in &mut self.workers {
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
     }
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
+// A worker thread that executes jobs.
 struct Worker {
     _id: usize,
-    _thread: thread::JoinHandle<Arc<Mutex<Receiver<Job>>>>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
     fn new(_id: usize, receiver: Arc<Mutex<Receiver<Job>>>) -> Worker {
         Worker {
             _id,
-            _thread: thread::spawn(move || loop {
-                let job = receiver.lock().unwrap().recv().unwrap();
-                println!("Worker {_id} got a job; executing.");
-                job();
-            }),
+            thread: Some(thread::spawn(move || loop {
+                match receiver.lock().unwrap().recv() {
+                    Ok(job) => {
+                        println!("Worker {_id} got a job; executing.");
+                        job();
+                    }
+                    Err(_) => {
+                        println!("Worker {_id} got a shutdown message.");
+                        break;
+                    }
+                }
+            })),
         }
     }
 }
