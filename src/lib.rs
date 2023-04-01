@@ -7,7 +7,6 @@ use crate::utils::thread_pool::ThreadPool;
 
 use std::error::Error;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
 
 pub fn run() -> Result<(), Box<dyn Error>> {
     let listener = match TcpListener::bind("127.0.0.1:5000") {
@@ -15,16 +14,22 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         Err(e) => return Err(Box::new(e)),
     };
 
-    let thread_pool = Arc::new(Mutex::new(ThreadPool::new(5)));
+    let mut thread_pool = ThreadPool::new(5);
 
     for stream in listener.incoming() {
-        thread_pool.clone().lock().unwrap().execute(|| {
-            if let Ok(stream) = stream {
-                if let Ok(request) = handle_request(&stream) {
-                    handle_response(&stream, &request);
-                }
+        match stream {
+            Ok(stream) => {
+                thread_pool.execute(move || match handle_request(&stream) {
+                    Ok(request) => {
+                        if let Err(e) = handle_response(&stream, &request) {
+                            println!("Response Error: {:#?}", e);
+                        }
+                    }
+                    Err(e) => println!("Request Error: {:#?}", e),
+                });
             }
-        });
+            Err(e) => println!("Stream Error: {:#?}", e),
+        }
     }
     Ok(())
 }

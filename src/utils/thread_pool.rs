@@ -1,52 +1,48 @@
-use std::error::Error;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// A thread pool that executes jobs in parallel threads.
 pub struct ThreadPool {
-    size: usize,
-    threads: Vec<Worker>,
+    _workers: Vec<Worker>,
     sender: mpsc::Sender<Job>,
 }
-
-struct Worker {
-    id: usize,
-    thread: thread::JoinHandle<Arc<Mutex<Receiver<Job>>>>,
-}
-
-type Job = Box<dyn FnOnce() + Send + 'static>;
 
 impl ThreadPool {
     pub fn new(size: usize) -> ThreadPool {
         assert!(size > 0);
-        let mut threads = Vec::with_capacity(size);
+        let mut _workers = Vec::with_capacity(size);
         let (sender, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
         for i in 0..size {
-            threads[i] = Worker::new(i, Arc::clone(&receiver));
+            _workers.push(Worker::new(i, Arc::clone(&receiver)));
         }
-        ThreadPool {
-            size,
-            threads,
-            sender,
-        }
+        ThreadPool { _workers, sender }
     }
 
-    pub fn execute<F>(&mut self, f: F) -> Result<(), Box<dyn Error>>
+    pub fn execute<F>(&mut self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
-        self.sender.send(Box::new(f))?;
-        Ok(())
+        self.sender.send(Box::new(f)).unwrap();
     }
 }
 
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+struct Worker {
+    _id: usize,
+    _thread: thread::JoinHandle<Arc<Mutex<Receiver<Job>>>>,
+}
+
 impl Worker {
-    fn new(id: usize, receiver: Arc<Mutex<Receiver<Job>>>) -> Worker {
+    fn new(_id: usize, receiver: Arc<Mutex<Receiver<Job>>>) -> Worker {
         Worker {
-            id,
-            thread: thread::spawn(move || loop {
-                receiver.lock().unwrap().recv().unwrap()();
+            _id,
+            _thread: thread::spawn(move || loop {
+                let job = receiver.lock().unwrap().recv().unwrap();
+                println!("Worker {_id} got a job; executing.");
+                job();
             }),
         }
     }

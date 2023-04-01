@@ -1,10 +1,10 @@
-use std::{io::Write, net::TcpStream, path::Path};
+use std::{io::Error, io::Write, net::TcpStream, path::Path};
 
-use crate::utils::file_utils::read_file_contents;
+use crate::utils::file_utils::{get_first_html_file, read_file_with_extension};
 
 use super::request::Request;
 
-pub fn handle_response(mut stream: &TcpStream, request: &Request) -> Result<(), std::io::Error> {
+pub fn handle_response(mut stream: &TcpStream, request: &Request) -> Result<(), Error> {
     let (status_code, content_string, content_length, content_type) = match get_response(request) {
         Ok(response) => response,
         Err(e) => return Err(e),
@@ -20,15 +20,19 @@ pub fn handle_response(mut stream: &TcpStream, request: &Request) -> Result<(), 
     stream.write_all(format.as_bytes())
 }
 
-fn get_response(request: &Request) -> Result<(String, String, usize, String), std::io::Error> {
+fn get_response(request: &Request) -> Result<(String, String, usize, String), Error> {
     let mut status_code = String::from("404 Not Found");
     let mut content_string = String::new();
     let mut content_length = 0;
     let mut content_type = String::new();
 
-    let path = format!("public{}", &request.path);
-    if Path::new(path.as_str()).exists() {
-        content_string = match read_file_contents(path.as_str()) {
+    let path = match request.path.as_str() {
+        "/" => get_first_html_file(Path::new("public")).unwrap_or_default(),
+        _ => format!("public{}", request.path),
+    };
+    let path = Path::new(path.as_str());
+    if path.exists() {
+        content_string = match read_file_with_extension(path) {
             Ok((contents, extension)) => {
                 status_code = String::from("200 OK");
                 content_length = contents.len();
