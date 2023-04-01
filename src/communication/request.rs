@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     error::Error,
     io::{BufRead, BufReader},
@@ -7,11 +8,17 @@ use std::{
 
 #[derive(Debug)]
 pub struct Request {
-    pub method: String,
+    pub method: Method,
     pub path: String,
     pub version: String,
     pub host: String,
     pub headers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum Method {
+    GET,
+    POST,
 }
 
 pub fn handle_request(stream: &TcpStream) -> Result<Request, Box<dyn Error>> {
@@ -28,13 +35,12 @@ pub fn handle_request(stream: &TcpStream) -> Result<Request, Box<dyn Error>> {
             Err(e) => return Err(Box::new(e)),
         }
     }
-
-    Ok(parse_request_lines(lines))
+    Ok(parse_request(lines))
 }
 
-fn parse_request_lines(lines: Vec<String>) -> Request {
+fn parse_request(lines: Vec<String>) -> Request {
     let mut request = Request {
-        method: String::new(),
+        method: Method::GET,
         path: String::new(),
         version: String::new(),
         host: String::new(),
@@ -44,7 +50,11 @@ fn parse_request_lines(lines: Vec<String>) -> Request {
     for line in lines {
         if line.starts_with("GET") || line.starts_with("POST") {
             let (method, path, version) = get_request_info(&mut line.split_whitespace());
-            request.method = method;
+            request.method = match method.as_str() {
+                "GET" => Method::GET,
+                "POST" => Method::POST,
+                _ => panic!("Invalid method."),
+            };
             request.path = path;
             request.version = version
         } else if line.starts_with("Host") {
