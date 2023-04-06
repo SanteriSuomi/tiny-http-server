@@ -4,7 +4,7 @@ mod utils;
 use communication::request::{Method, Request};
 
 use crate::communication::request::handle_request;
-use crate::communication::response::handle_response;
+use crate::communication::response::Response;
 use crate::utils::thread_pool::ThreadPool;
 
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ pub struct Server {
 
 #[derive(Clone)]
 struct Route {
-    func: Arc<dyn Fn(&Request) -> () + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Request, &Response) -> () + Send + Sync + 'static>,
 }
 
 impl Server {
@@ -37,14 +37,19 @@ impl Server {
         );
         let _address = format!("{address}:{port}");
         match TcpListener::bind(&_address) {
-            Ok(listener) => Ok(Server {
-                thread_pool: ThreadPool::new(5),
-                listener,
-                route_map: Arc::new(Mutex::new(HashMap::new())),
-                _address,
-            }),
-            Err(e) => return Err(Box::new(e)),
-        }
+            Ok(listener) => {
+                return Ok(Server {
+                    thread_pool: ThreadPool::new(5),
+                    listener,
+                    route_map: Arc::new(Mutex::new(HashMap::new())),
+                    _address,
+                })
+            }
+            Err(e) => {
+                println!("Listener Error: {:#?}", e);
+                return Err(Box::new(e));
+            }
+        };
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
@@ -55,35 +60,44 @@ impl Server {
                     self.thread_pool
                         .execute(move || match handle_request(&stream) {
                             Ok(request) => {
-                                Self::match_route(&map, &request);
-                                if let Err(e) = handle_response(&stream, &request) {
+                                let mut response = Response::new();
+                                Self::match_route(&map, &request, &response);
+                                if let Err(e) = response.send(&stream) {
                                     println!("Response Error: {:#?}", e);
                                 }
                             }
                             Err(e) => println!("Request Error: {:#?}", e),
                         });
                 }
-                Err(e) => println!("Stream Error: {:#?}", e),
+                Err(e) => {
+                    println!("Stream Error: {:#?}", e);
+                    return Err(Box::new(e));
+                }
             }
         }
+        println!("Server starting...");
         Ok(())
     }
 
-    // Static method to match the request to the correct route.
-    fn match_route(map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>, request: &Request) {
+    // Static method to match the request to the correct route, and call user registered function found on that route.
+    fn match_route(
+        map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
+        request: &Request,
+        response: &Response,
+    ) {
         if let Some(user_request) = map
             .lock()
             .unwrap()
             .get(&request.path)
             .and_then(|routes| routes.get(&request.method))
         {
-            (user_request.func)(&request);
+            (user_request.func)(&request, &response);
         }
     }
 
     pub fn register_route<F>(&mut self, path: &str, method: &str, func: F)
     where
-        F: Fn(&Request) -> () + Send + Sync + 'static,
+        F: Fn(&Request, &Response) -> () + Send + Sync + 'static,
     {
         let method = match method {
             "GET" => Method::GET,
