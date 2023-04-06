@@ -1,4 +1,4 @@
-use tiny_rust_server::Server;
+use tiny_rust_server::client::server::Server;
 
 fn main() {
     match Server::new(5000) {

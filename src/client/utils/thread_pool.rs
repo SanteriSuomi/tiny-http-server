@@ -42,8 +42,6 @@ impl Drop for ThreadPool {
     }
 }
 
-type Job = Box<dyn FnOnce() + Send + 'static>;
-
 // A worker thread that executes jobs.
 struct Worker {
     _id: usize,
@@ -69,3 +67,5 @@ impl Worker {
         }
     }
 }
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
