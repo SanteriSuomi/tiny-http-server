@@ -19,6 +19,20 @@ pub struct Request {
 pub enum Method {
     GET,
     POST,
+    PUT,
+    DELETE,
+}
+
+impl Method {
+    pub fn from_str(method: &str) -> Option<Method> {
+        match method {
+            "GET" => Some(Method::GET),
+            "POST" => Some(Method::POST),
+            "PUT" => Some(Method::PUT),
+            "DELETE" => Some(Method::DELETE),
+            _ => None,
+        }
+    }
 }
 
 pub fn handle_request(stream: &TcpStream) -> Result<Request, Box<dyn Error>> {

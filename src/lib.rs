@@ -22,20 +22,12 @@ pub struct Server {
 
 #[derive(Clone)]
 struct Route {
-    func: Arc<dyn Fn(&Request, &Response) -> () + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
 }
 
 impl Server {
-    pub fn new(
-        address: &str,
-        port: &str,
-        thread_pool_size: usize,
-    ) -> Result<Server, Box<dyn Error>> {
-        assert!(
-            thread_pool_size > 0,
-            "Thread pool size must be greater than 0."
-        );
-        let _address = format!("{address}:{port}");
+    pub fn new(port: usize) -> Result<Server, Box<dyn Error>> {
+        let _address = format!("127.0.0.1:{port}");
         match TcpListener::bind(&_address) {
             Ok(listener) => {
                 return Ok(Server {
@@ -53,6 +45,7 @@ impl Server {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        println!("Server starting...");
         for stream in self.listener.incoming() {
             let map = self.route_map.clone();
             match stream {
@@ -61,7 +54,7 @@ impl Server {
                         .execute(move || match handle_request(&stream) {
                             Ok(request) => {
                                 let mut response = Response::new();
-                                Self::match_route(&map, &request, &response);
+                                Self::match_route(&map, &request, &mut response);
                                 if let Err(e) = response.send(&stream) {
                                     println!("Response Error: {:#?}", e);
                                 }
@@ -75,7 +68,6 @@ impl Server {
                 }
             }
         }
-        println!("Server starting...");
         Ok(())
     }
 
@@ -83,7 +75,7 @@ impl Server {
     fn match_route(
         map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
         request: &Request,
-        response: &Response,
+        response: &mut Response,
     ) {
         if let Some(user_request) = map
             .lock()
@@ -91,28 +83,29 @@ impl Server {
             .get(&request.path)
             .and_then(|routes| routes.get(&request.method))
         {
-            (user_request.func)(&request, &response);
+            (user_request.func)(request, response);
         }
     }
 
-    pub fn register_route<F>(&mut self, path: &str, method: &str, func: F)
+    // Register a route with the server.
+    pub fn route<F>(&mut self, path: &str, method: &str, func: F)
     where
-        F: Fn(&Request, &Response) -> () + Send + Sync + 'static,
+        F: Fn(&Request, &mut Response) -> () + Send + Sync + 'static,
     {
-        let method = match method {
-            "GET" => Method::GET,
-            "POST" => Method::POST,
-            _ => panic!("Invalid method."),
-        };
-        let mut route_map = self.route_map.lock().unwrap();
-        let method_map = route_map
-            .entry(path.to_string())
-            .or_insert_with(HashMap::new);
-        method_map.insert(
-            method,
-            Route {
-                func: Arc::new(func),
-            },
-        );
+        match Method::from_str(method) {
+            Some(method) => {
+                let mut route_map = self.route_map.lock().unwrap();
+                let method_map = route_map
+                    .entry(path.to_string())
+                    .or_insert_with(HashMap::new);
+                method_map.insert(
+                    method,
+                    Route {
+                        func: Arc::new(func),
+                    },
+                );
+            }
+            None => println!("Invalid method: {}", method),
+        }
     }
 }
