@@ -2,11 +2,16 @@ use crate::client::communication::method::Method;
 use crate::client::communication::request::Request;
 
 use crate::client::communication::response::Response;
+use crate::client::utils::file_utils::get_first_html_file_name;
+use crate::client::utils::guess_utils::guess_mime_type;
 use crate::client::utils::thread_pool::ThreadPool;
 
 use std::collections::HashMap;
+use std::env::current_dir;
 use std::error::Error;
+use std::fs::read_to_string;
 use std::net::TcpListener;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 // This is the main entry point for the server.
@@ -15,6 +20,7 @@ pub struct Server {
     listener: TcpListener,
     route_map: Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
     _address: String,
+    root_path: String,
 }
 
 #[derive(Clone)]
@@ -32,6 +38,7 @@ impl Server {
                     listener,
                     route_map: Arc::new(Mutex::new(HashMap::new())),
                     _address,
+                    root_path: current_dir().unwrap_or_default().display().to_string(),
                 })
             }
             Err(e) => {
@@ -104,5 +111,34 @@ impl Server {
             }
             None => println!("Invalid method: {}", method),
         }
+    }
+
+    // Register a route with the server that serves static files from a directory starting from project root.
+    pub fn serve_static(&mut self, path: &str, dir: &str) {
+        let root_path = format!("{}\\{}", self.root_path, dir);
+        self.route(path, "GET", move |request, response| {
+            let (resource, extension) = if &request.path == "/" {
+                match get_first_html_file_name(Path::new(&root_path)) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        println!("File Error: {:#?}", e);
+                        (request.path.clone(), String::from("text/plain"))
+                    }
+                }
+            } else {
+                (request.path.clone(), String::from("text/plain"))
+            };
+            let file_path = format!("{}\\{}", root_path, resource);
+            match read_to_string(file_path) {
+                Ok(file) => {
+                    response.set_content_type(&guess_mime_type(&extension));
+                    response.set_content(&file);
+                    println!("Response: {:#?}", response);
+                }
+                Err(e) => {
+                    println!("File Read Error: {:#?}", e);
+                }
+            }
+        });
     }
 }

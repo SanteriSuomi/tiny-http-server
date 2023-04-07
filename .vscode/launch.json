@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'rust-server'",
+            "name": "Debug executable 'tiny-rust-server'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=rust-server",
-                    "--package=rust-server"
+                    "--bin=tiny-rust-server",
+                    "--package=tiny-rust-server"
                 ],
                 "filter": {
-                    "name": "rust-server",
+                    "name": "tiny-rust-server",
                     "kind": "bin"
                 }
             },

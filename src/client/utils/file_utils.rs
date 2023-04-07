@@ -16,21 +16,26 @@ pub fn read_file_with_extension(path: &Path) -> Result<(String, String), Error> 
 }
 
 // Gets the first HTML file name in a directory.
-pub fn get_first_html_file(path: &Path) -> Result<String, Error> {
+pub fn get_first_html_file_name(path: &Path) -> Result<(String, String), Error> {
     let paths = fs::read_dir(path)?;
-    let mut file_name = String::new();
     for path in paths {
         let path = path?.path();
-        if path.is_file() {
-            let path_string = path.to_string_lossy();
-            let extension = path_string.split('.').last().unwrap_or_default();
-            if extension == "html" {
-                file_name = path_string.to_string();
-                break;
+        match (path.is_file(), path.extension()) {
+            (true, Some(extension)) => {
+                if extension == "html" {
+                    return Ok((
+                        path.file_name().unwrap().to_string_lossy().to_string(),
+                        path.extension().unwrap().to_string_lossy().to_string(),
+                    ));
+                }
             }
+            _ => continue,
         }
     }
-    Ok(file_name)
+    Err(Error::new(
+        std::io::ErrorKind::NotFound,
+        "No HTML files found.",
+    ))
 }
 
 // Reads the contents of a file and returns the contents.

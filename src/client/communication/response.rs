@@ -1,4 +1,4 @@
-use mime_guess;
+use crate::client::utils::guess_utils::guess_mime_type;
 use std::{io::Error, io::Write, net::TcpStream};
 
 #[derive(Debug)]
@@ -22,25 +22,21 @@ impl Response {
     // Send this response back to the client.
     pub fn send(&mut self, stream: &TcpStream) -> Result<(), Error> {
         match (&self.content_type, &self.content) {
+            // If the content type is set, but the content is not, send the content type.
             (Some(content_type), Some(_)) => {
                 self.send_with_content(&stream, content_type)?;
                 return Ok(());
             }
+            // If the content type is not set, but the content is, guess the content type and send it.
             (None, Some(content)) => {
                 let content_type = match &self.content_type {
                     Some(content_type) => content_type.clone(),
-                    None => {
-                        let guess = mime_guess::from_ext(content.as_str()).first();
-                        if let Some(guess) = guess {
-                            String::from(guess.essence_str())
-                        } else {
-                            String::from("text/plain")
-                        }
-                    }
+                    None => guess_mime_type(content.as_str()),
                 };
                 self.send_with_content(&stream, &content_type)?;
                 return Ok(());
             }
+            // If neither the content type nor the content is set, send no content.
             _ => {
                 self.send_without_content(&stream)?;
                 return Ok(());
@@ -91,54 +87,4 @@ impl Response {
     pub fn set_content(&mut self, content: &str) {
         self.content = Some(content.to_string());
     }
-
-    // fn handle_response(&mut self, mut stream: &TcpStream, request: &Request) -> Result<(), Error> {
-    //     // let (status_code, content_string, content_length, content_type) =
-    //     //     match Self::build_response(request) {
-    //     //         Ok(response) => response,
-    //     //         Err(e) => return Err(e),
-    //     //     };
-
-    //     let status_code = &self.status_code;
-    //     let status_message = &self.status_message;
-    //     let content_type = &self.content_type;
-    //     let content_string = &self.content;
-    //     let content_length = content_string.len();
-
-    //     let format = format!(
-    //         "HTTP/1.1 {status_code} {status_message}\r\n\
-    //          Content-Type: text/{content_type}\r\n\
-    //          Content-Length: {content_length}\r\n\
-    //          \r\n\
-    //          {content_string}",
-    //     );
-    //     stream.write_all(format.as_bytes())
-    // }
-
-    // fn build_response(request: &Request) -> Result<(String, String, usize, String), Error> {
-    //     let mut status_code = String::from("404 Not Found");
-
-    //     let mut content_string = String::new();
-    //     let mut content_length = 0;
-    //     let mut content_type = String::new();
-
-    //     let path = match request.path.as_str() {
-    //         "/" => get_first_html_file(Path::new("public")).unwrap_or_default(),
-    //         _ => format!("public{}", request.path),
-    //     };
-    //     let path = Path::new(path.as_str());
-    //     if path.exists() {
-    //         content_string = match read_file_with_extension(path) {
-    //             Ok((contents, extension)) => {
-    //                 status_code = String::from("200 OK");
-    //                 content_length = contents.len();
-    //                 content_type = extension;
-    //                 contents
-    //             }
-    //             Err(e) => return Err(e),
-    //         };
-    //     }
-
-    //     Ok((status_code, content_string, content_length, content_type))
-    // }
 }
