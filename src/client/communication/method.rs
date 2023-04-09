@@ -17,7 +17,7 @@ impl Method {
             "POST" => Some(Method::POST(String::from("POST"))),
             "PUT" => Some(Method::PUT(String::from("PUT"))),
             "DELETE" => Some(Method::DELETE(String::from("DELETE"))),
-            _ => None,
+            _ => panic!("Non-supported request method"),
         }
     }
 

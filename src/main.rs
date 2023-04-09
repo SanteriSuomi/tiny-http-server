@@ -3,7 +3,7 @@ use tiny_rust_server::client::server::Server;
 fn main() {
     match Server::new(5000) {
         Ok(mut server) => {
-            server.serve_static("/", "public");
+            server.serve_static("public");
 
             server.route("/test", "GET", |req, res| {
                 println!("GET Request: {:#?}", req);

@@ -7,11 +7,18 @@ use std::{
     net::TcpStream,
 };
 
+// Additional data about the request used only server-side.
+#[derive(Debug)]
+pub struct StaticRequestData {
+    pub path: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct Request {
     pub method: Method,
     pub path: String,
     pub headers: HashMap<String, String>,
+    pub static_request_data: Option<StaticRequestData>,
 }
 
 impl Request {
@@ -36,8 +43,8 @@ impl Request {
         let mut request = Request {
             method: Method::default(),
             path: String::new(),
-
             headers: HashMap::new(),
+            static_request_data: None,
         };
 
         let mut headers: Vec<String> = Vec::new();
