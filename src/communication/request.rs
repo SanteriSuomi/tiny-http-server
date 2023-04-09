@@ -1,4 +1,4 @@
-use crate::client::communication::method::Method;
+use crate::communication::method::Method;
 use core::panic;
 use std::{
     collections::HashMap,

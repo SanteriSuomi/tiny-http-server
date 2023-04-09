@@ -1,11 +1,11 @@
-use crate::client::communication::method::Method;
-use crate::client::communication::request::{Request, StaticRequestData};
+use crate::communication::method::Method;
+use crate::communication::request::{Request, StaticRequestData};
 
-use crate::client::communication::response::Response;
-use crate::client::utils::file_utils::get_first_html_file_name;
-use crate::client::utils::general_utils::is_static_file;
-use crate::client::utils::guess_utils::guess_mime_type;
-use crate::client::utils::thread_pool::ThreadPool;
+use crate::communication::response::Response;
+use crate::utils::file_utils::get_first_html_file_name;
+use crate::utils::general_utils::is_static_file;
+use crate::utils::guess_utils::guess_mime_type;
+use crate::utils::thread_pool::ThreadPool;
 
 use std::collections::HashMap;
 use std::env::current_dir;
