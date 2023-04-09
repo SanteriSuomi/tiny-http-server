@@ -198,28 +198,6 @@ impl Server {
                     println!("File Read Error: {:#?}", e);
                 }
             }
-            // if request.static_request_data.is_none() {
-            //     println!("Static request data is none.");
-            //     return;
-            // }
-            // println!("{:#?}", request.static_request_data);
-            // let (resource, extension) = match get_first_html_file_name(Path::new(&root_path)) {
-            //     Ok(file) => file,
-            //     Err(e) => {
-            //         println!("File Error: {:#?}", e);
-            //         (request.path.clone(), String::from("text/plain"))
-            //     }
-            // };
-            // let file_path = format!("{}\\{}", root_path, resource);
-            // match read_to_string(file_path) {
-            //     Ok(file) => {
-            //         response.set_content_type(&guess_mime_type(&extension));
-            //         response.set_content(&file);
-            //     }
-            //     Err(e) => {
-            //         println!("File Read Error: {:#?}", e);
-            //     }
-            // }
         });
     }
 }
