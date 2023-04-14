@@ -32,28 +32,24 @@ struct Route {
     func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
 }
 
-// Helper struct for initializing and formatting the server address.
+// Represents the server address, which is a tuple of an IP address and a port.
 struct Address {
-    ip: (usize, usize, usize, usize),
-    port: usize,
+    ip: (u8, u8, u8, u8),
+    port: u16,
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{ip0}.{ip1}.{ip2}.{ip3}:{port}",
-            ip0 = self.ip.0,
-            ip1 = self.ip.1,
-            ip2 = self.ip.2,
-            ip3 = self.ip.3,
-            port = self.port
+            "{}.{}.{}.{}:{}",
+            self.ip.0, self.ip.1, self.ip.2, self.ip.3, self.port
         )
     }
 }
 
 impl Server {
-    pub fn new(ip: (usize, usize, usize, usize), port: usize) -> Result<Server, Box<dyn Error>> {
+    pub fn new(ip: (u8, u8, u8, u8), port: u16) -> Result<Server, Box<dyn Error>> {
         let _address: String = Address { ip, port }.to_string();
         match TcpListener::bind(&_address) {
             Ok(listener) => {
@@ -206,31 +202,24 @@ impl Server {
         });
     }
 
-    // Static method to get the file details (path, extension) for a static file request.
     fn get_static_file_details(request: &Request, root_path: &str) -> Option<(String, String)> {
         if let Some(ref data) = request.static_request_data {
+            // If the request has a path, use that path to get the file. Otherwise, get the first HTML file in the directory.
             if let Some(ref path) = data.path {
                 return Some((
                     format!("{}\\{}", root_path, path),
                     path.split('.').last().unwrap_or("text/plain").to_string(),
                 ));
             } else {
-                let (resource, extension) = match get_first_html_file_name(Path::new(&root_path)) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        log!("Get HTML File Error: {:#?}", e);
-                        (
-                            request.path.clone(),
-                            request
-                                .path
-                                .split('.')
-                                .last()
-                                .unwrap_or("text/plain")
-                                .to_string(),
-                        )
+                match get_first_html_file_name(Path::new(&root_path)) {
+                    Ok((resource, extension)) => {
+                        return Some((format!("{}\\{}", root_path, resource), extension));
                     }
-                };
-                return Some((format!("{}\\{}", root_path, resource), extension));
+                    Err(e) => {
+                        log!("Static File Retrieval Error (No HTML File Found): {:#?}", e);
+                        return None;
+                    }
+                }
             }
         }
         None
