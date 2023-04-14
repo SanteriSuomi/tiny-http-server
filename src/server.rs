@@ -2,6 +2,8 @@ use crate::communication::method::Method;
 use crate::communication::request::{Request, StaticRequestData};
 
 use crate::communication::response::Response;
+use crate::log;
+use crate::log::logger::Logger;
 use crate::utils::file::get_first_html_file_name;
 use crate::utils::general::is_static_file;
 use crate::utils::guess::guess_mime_type;
@@ -12,6 +14,7 @@ use std::env::current_dir;
 use std::error::Error;
 use std::fmt;
 use std::fs::read_to_string;
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -54,16 +57,18 @@ impl Server {
         let _address: String = Address { ip, port }.to_string();
         match TcpListener::bind(&_address) {
             Ok(listener) => {
+                Logger::init("log.txt");
+                log!("Server listening on: {}", _address);
                 return Ok(Server {
                     thread_pool: ThreadPool::new(5),
                     listener,
                     route_map: Arc::new(Mutex::new(HashMap::new())),
                     _address,
                     root_path: current_dir().unwrap_or_default().display().to_string(),
-                })
+                });
             }
             Err(e) => {
-                println!("Listener Error: {:#?}", e);
+                log!("Listener Error: {:#?}", e);
                 return Err(Box::new(e));
             }
         };
