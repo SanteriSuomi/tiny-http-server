@@ -2,9 +2,9 @@ use crate::communication::method::Method;
 use crate::communication::request::{Request, StaticRequestData};
 
 use crate::communication::response::Response;
-use crate::utils::file_utils::get_first_html_file_name;
-use crate::utils::general_utils::is_static_file;
-use crate::utils::guess_utils::guess_mime_type;
+use crate::utils::file::get_first_html_file_name;
+use crate::utils::general::is_static_file;
+use crate::utils::guess::guess_mime_type;
 use crate::utils::thread_pool::ThreadPool;
 
 use std::collections::HashMap;

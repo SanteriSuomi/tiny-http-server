@@ -1,4 +1,4 @@
-use crate::utils::guess_utils::guess_mime_type;
+use crate::utils::guess::guess_mime_type;
 use std::{io::Error, io::Write, net::TcpStream};
 
 #[derive(Debug)]
