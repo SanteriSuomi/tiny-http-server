@@ -1,8 +1,9 @@
 use std::{
     env,
     fs::File,
+    io::Write,
     sync::{Mutex, Once},
-    time,
+    time::SystemTime,
 };
 
 static INIT_LOGGER: Once = Once::new();
@@ -13,18 +14,16 @@ macro_rules! log {
     ($($arg:tt)*) => {
         unsafe {
             if let Some(logger) = &crate::log::logger::LOGGER {
-                let mut logger = logger.lock().unwrap();
-                let time_since_launch =  logger.get_time_since_start();
-                let log_string = format!("{}: {} \n", time_since_launch, format_args!($($arg)*));
-                write!(logger.log_file, "{}", log_string).unwrap();
+                logger.lock().unwrap().log(&format_args!($($arg)*).to_string());
            }
         }
     };
 }
 
+// Singleton logger.
 pub struct Logger {
     pub log_file: File,
-    pub start_time: time::SystemTime,
+    pub start_time: SystemTime,
 }
 
 impl Logger {
@@ -35,16 +34,28 @@ impl Logger {
             unsafe {
                 LOGGER = Some(Mutex::new(Logger {
                     log_file: File::create(path).unwrap(),
-                    start_time: time::SystemTime::now(),
+                    start_time: SystemTime::now(),
                 }))
             };
         });
     }
 
+    // Get the time since the logger was initialized.
     pub fn get_time_since_start(&self) -> String {
-        let since_start = time::SystemTime::now()
+        let since_start = SystemTime::now()
             .duration_since(self.start_time)
-            .expect("Error: Time went backwards");
+            .unwrap_or_default();
         since_start.as_secs().to_string()
+    }
+
+    // Log a message to the log file.
+    pub fn log(&mut self, message: &str) {
+        if let Err(e) = write!(
+            self.log_file,
+            "{}",
+            format!("{}: {} \n", self.get_time_since_start(), message)
+        ) {
+            println!("LOG ERROR: {e}");
+        }
     }
 }

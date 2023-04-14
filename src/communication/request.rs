@@ -1,11 +1,6 @@
-use crate::communication::method::Method;
-use core::panic;
-use std::{
-    collections::HashMap,
-    error::Error,
-    io::{BufRead, BufReader},
-    net::TcpStream,
-};
+use crate::log;
+use crate::{communication::method::Method, utils::stream::read_stream_lines};
+use std::{collections::HashMap, error::Error, net::TcpStream};
 
 // Additional data about the request used only server-side.
 #[derive(Debug)]
@@ -13,6 +8,7 @@ pub struct StaticRequestData {
     pub path: Option<String>,
 }
 
+// Representation of a HTTP request.
 #[derive(Debug)]
 pub struct Request {
     pub method: Method,
@@ -22,24 +18,15 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn handle_request(stream: &TcpStream) -> Result<Request, Box<dyn Error>> {
-        let buf_reader = BufReader::new(stream);
-        let mut lines: Vec<String> = Vec::new();
-        for line in buf_reader.lines() {
-            match line {
-                Ok(line) => {
-                    if line.is_empty() {
-                        break;
-                    };
-                    lines.push(line);
-                }
-                Err(e) => return Err(Box::new(e)),
-            }
+    pub fn build_request(stream: &TcpStream) -> Result<Request, Box<dyn Error>> {
+        let lines = read_stream_lines(stream);
+        match lines {
+            Ok(lines) => Ok(Self::get_request_struct(lines)),
+            Err(e) => return Err(e),
         }
-        Ok(Self::parse_request(lines))
     }
 
-    fn parse_request(lines: Vec<String>) -> Request {
+    fn get_request_struct(lines: Vec<String>) -> Request {
         let mut request = Request {
             method: Method::default(),
             path: String::new(),
@@ -52,8 +39,11 @@ impl Request {
             if Self::starts_with_http_request_type(&line) {
                 let (method, path) = Self::get_request_type_info(&line);
                 request.method = match Method::from_str(&method) {
-                    Some(method) => method,
-                    None => panic!("Non-supported request method"),
+                    Ok(method) => method,
+                    Err(e) => {
+                        log!("Stream Error: {:#?}", e);
+                        return request;
+                    }
                 };
                 request.path = path;
             } else {
@@ -79,6 +69,7 @@ impl Request {
         false
     }
 
+    // Get the request type and path from the first line of the request.
     fn get_request_type_info(line: &String) -> (String, String) {
         let mut iter = line.split_whitespace();
         (

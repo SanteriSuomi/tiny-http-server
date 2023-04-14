@@ -12,9 +12,8 @@ use crate::utils::thread_pool::ThreadPool;
 use std::collections::HashMap;
 use std::env::current_dir;
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 use std::fs::read_to_string;
-use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -33,13 +32,14 @@ struct Route {
     func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
 }
 
+// Helper struct for initializing and formatting the server address.
 struct Address {
     ip: (usize, usize, usize, usize),
     port: usize,
 }
 
-impl fmt::Display for Address {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{ip0}.{ip1}.{ip2}.{ip3}:{port}",
@@ -75,21 +75,21 @@ impl Server {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("Server starting...");
+        println!("Server started");
         for stream in self.listener.incoming() {
             let map = self.route_map.clone();
             match stream {
                 Ok(stream) => {
                     self.thread_pool
-                        .execute(move || match Request::handle_request(&stream) {
+                        .execute(move || match Request::build_request(&stream) {
                             Ok(mut request) => {
                                 Self::handle_loop(&map, &stream, &mut request);
                             }
-                            Err(e) => println!("Request Error: {:#?}", e),
+                            Err(e) => log!("Request Error: {:#?}", e),
                         });
                 }
                 Err(e) => {
-                    println!("Stream Error: {:#?}", e);
+                    log!("Stream Error: {:#?}", e);
                     return Err(Box::new(e));
                 }
             }
@@ -103,13 +103,12 @@ impl Server {
         stream: &TcpStream,
         request: &mut Request,
     ) {
-        // Check if the request is for a static file.
         Self::check_static_request(request);
         let mut response = Response::new();
         Self::match_route(route_map, request, &mut response);
-        println!("Response: {:#?}", response);
+        log!("Request: {:#?}", request);
         if let Err(e) = response.send(stream) {
-            println!("Response Error: {:#?}", e);
+            log!("Response Error: {:#?}", e);
         }
     }
 
@@ -142,7 +141,7 @@ impl Server {
         (is_static, path.to_string_lossy().to_string())
     }
 
-    // Static method to match the request to the correct route, and call user registered function found on that route.
+    // Static method to match the request to the correct route, and then call the possible user registered function found on that route.
     fn match_route(
         map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
         request: &Request,
@@ -158,7 +157,7 @@ impl Server {
         }
     }
 
-    // Register a route with the server.
+    // Create a route for the server.
     pub fn route<F>(&mut self, path: &str, method: &str, func: F)
     where
         F: Fn(&Request, &mut Response) -> () + Send + Sync + 'static,
@@ -167,12 +166,13 @@ impl Server {
         self.create_route(path, method, func);
     }
 
+    // Register a route with the server.
     fn create_route<F>(&mut self, path: &str, method: &str, func: F)
     where
         F: Fn(&Request, &mut Response) -> () + Send + Sync + 'static,
     {
         match Method::from_str(method) {
-            Some(method) => {
+            Ok(method) => {
                 let mut route_map = self.route_map.lock().unwrap();
                 let method_map = route_map
                     .entry(path.to_string())
@@ -184,7 +184,7 @@ impl Server {
                     },
                 );
             }
-            None => println!("Invalid method: {}", method),
+            Err(e) => log!("Method Error: {:#?}", e),
         }
     }
 
@@ -199,7 +199,7 @@ impl Server {
                     }
                     Err(e) => {
                         response.set_status(404, "Not Found");
-                        println!("File Read Error: {:#?}", e);
+                        log!("File Read Error: {:#?}", e);
                     }
                 }
             }
@@ -218,7 +218,7 @@ impl Server {
                 let (resource, extension) = match get_first_html_file_name(Path::new(&root_path)) {
                     Ok(file) => file,
                     Err(e) => {
-                        println!("Get File Details Error: {:#?}", e);
+                        log!("Get HTML File Error: {:#?}", e);
                         (
                             request.path.clone(),
                             request

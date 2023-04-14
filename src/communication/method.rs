@@ -1,3 +1,7 @@
+use std::error::Error;
+use std::io::{self, ErrorKind};
+
+// Representation of the supported HTTP methods.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Method {
     GET(String),
@@ -11,13 +15,16 @@ impl Method {
         Method::GET(String::from("GET"))
     }
 
-    pub fn from_str(method: &str) -> Option<Method> {
+    pub fn from_str(method: &str) -> Result<Method, Box<dyn Error>> {
         match method {
-            "GET" => Some(Method::GET(String::from("GET"))),
-            "POST" => Some(Method::POST(String::from("POST"))),
-            "PUT" => Some(Method::PUT(String::from("PUT"))),
-            "DELETE" => Some(Method::DELETE(String::from("DELETE"))),
-            _ => panic!("Non-supported request method"),
+            "GET" => Ok(Method::GET(String::from("GET"))),
+            "POST" => Ok(Method::POST(String::from("POST"))),
+            "PUT" => Ok(Method::PUT(String::from("PUT"))),
+            "DELETE" => Ok(Method::DELETE(String::from("DELETE"))),
+            _ => Err(Box::new(io::Error::new(
+                ErrorKind::Other,
+                "Non-supported request method",
+            ))),
         }
     }
 

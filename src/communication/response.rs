@@ -1,6 +1,7 @@
 use crate::utils::guess::guess_mime_type;
 use std::{io::Error, io::Write, net::TcpStream};
 
+// Representation of a HTTP response.
 #[derive(Debug)]
 pub struct Response {
     pub status_code: usize,
