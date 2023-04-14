@@ -10,6 +10,7 @@ use crate::utils::thread_pool::ThreadPool;
 use std::collections::HashMap;
 use std::env::current_dir;
 use std::error::Error;
+use std::fmt;
 use std::fs::read_to_string;
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
@@ -29,9 +30,28 @@ struct Route {
     func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
 }
 
+struct Address {
+    ip: (usize, usize, usize, usize),
+    port: usize,
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{ip0}.{ip1}.{ip2}.{ip3}:{port}",
+            ip0 = self.ip.0,
+            ip1 = self.ip.1,
+            ip2 = self.ip.2,
+            ip3 = self.ip.3,
+            port = self.port
+        )
+    }
+}
+
 impl Server {
-    pub fn new(port: usize) -> Result<Server, Box<dyn Error>> {
-        let _address = format!("127.0.0.1:{port}");
+    pub fn new(ip: (usize, usize, usize, usize), port: usize) -> Result<Server, Box<dyn Error>> {
+        let _address: String = Address { ip, port }.to_string();
         match TcpListener::bind(&_address) {
             Ok(listener) => {
                 return Ok(Server {
@@ -58,7 +78,7 @@ impl Server {
                     self.thread_pool
                         .execute(move || match Request::handle_request(&stream) {
                             Ok(mut request) => {
-                                Self::handle(&map, &stream, &mut request);
+                                Self::handle_loop(&map, &stream, &mut request);
                             }
                             Err(e) => println!("Request Error: {:#?}", e),
                         });
@@ -72,22 +92,23 @@ impl Server {
         Ok(())
     }
 
-    // Execute main logic for the server.
-    fn handle(
-        map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
+    // Execute main request-response "loop" logic for the server.
+    fn handle_loop(
+        route_map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
         stream: &TcpStream,
         request: &mut Request,
     ) {
         // Check if the request is for a static file.
         Self::check_static_request(request);
         let mut response = Response::new();
-        Self::match_route(map, request, &mut response);
+        Self::match_route(route_map, request, &mut response);
+        println!("Response: {:#?}", response);
         if let Err(e) = response.send(stream) {
             println!("Response Error: {:#?}", e);
         }
     }
 
-    // Check if the request is for a static file, and add the static request data to the request object if so.
+    // Check if the request is for a static file, and add the static request data to the request object if so. Also change to forward to the static route.
     fn check_static_request(request: &mut Request) {
         if request.path == "/" {
             request.static_request_data = Some(StaticRequestData { path: None });
@@ -166,38 +187,47 @@ impl Server {
     pub fn serve_static(&mut self, dir: &str) {
         let root_path = format!("{}\\{}", self.root_path, dir);
         self.create_route("/static", "GET", move |request, response| {
-            let file_path;
-            let extension;
-            match request.static_request_data {
-                Some(ref data) => match data.path {
-                    Some(ref path) => {
-                        file_path = format!("{}\\{}", root_path, path);
-                        extension = path.to_string();
+            if let Some((path, extension)) = Self::get_static_file_details(request, &root_path) {
+                match read_to_string(path) {
+                    Ok(file_content) => {
+                        response.set_contents(&guess_mime_type(&extension), &file_content)
                     }
-                    None => {
-                        let (resource, ext) = match get_first_html_file_name(Path::new(&root_path))
-                        {
-                            Ok(file) => file,
-                            Err(e) => {
-                                println!("File Error: {:#?}", e);
-                                (request.path.clone(), String::from("text/plain"))
-                            }
-                        };
-                        file_path = format!("{}\\{}", root_path, resource);
-                        extension = ext;
+                    Err(e) => {
+                        response.set_status(404, "Not Found");
+                        println!("File Read Error: {:#?}", e);
                     }
-                },
-                None => return,
-            }
-            match read_to_string(file_path) {
-                Ok(file) => {
-                    response.set_content_type(&guess_mime_type(&extension));
-                    response.set_content(&file);
-                }
-                Err(e) => {
-                    println!("File Read Error: {:#?}", e);
                 }
             }
         });
+    }
+
+    // Static method to get the file details (path, extension) for a static file request.
+    fn get_static_file_details(request: &Request, root_path: &str) -> Option<(String, String)> {
+        if let Some(ref data) = request.static_request_data {
+            if let Some(ref path) = data.path {
+                return Some((
+                    format!("{}\\{}", root_path, path),
+                    path.split('.').last().unwrap_or("text/plain").to_string(),
+                ));
+            } else {
+                let (resource, extension) = match get_first_html_file_name(Path::new(&root_path)) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        println!("Get File Details Error: {:#?}", e);
+                        (
+                            request.path.clone(),
+                            request
+                                .path
+                                .split('.')
+                                .last()
+                                .unwrap_or("text/plain")
+                                .to_string(),
+                        )
+                    }
+                };
+                return Some((format!("{}\\{}", root_path, resource), extension));
+            }
+        }
+        None
     }
 }

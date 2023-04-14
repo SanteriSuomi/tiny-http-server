@@ -3,7 +3,7 @@ use std::{io::Error, io::Write, net::TcpStream};
 
 #[derive(Debug)]
 pub struct Response {
-    pub status_code: String,
+    pub status_code: usize,
     pub status_message: String,
     pub content_type: Option<String>,
     pub content: Option<String>,
@@ -12,7 +12,7 @@ pub struct Response {
 impl Response {
     pub fn new() -> Self {
         Self {
-            status_code: String::from("200"),
+            status_code: 200,
             status_message: String::from("OK"),
             content_type: None,
             content: None,
@@ -67,17 +67,22 @@ impl Response {
         stream.write_all(format.as_bytes())
     }
 
-    pub fn set_status(&mut self, status_code: &str, status_message: &str) {
-        self.status_code = status_code.to_string();
+    pub fn set_status(&mut self, status_code: usize, status_message: &str) {
+        self.status_code = status_code;
         self.status_message = status_message.to_string();
     }
 
-    pub fn set_status_code(&mut self, status_code: &str) {
-        self.status_code = status_code.to_string();
+    pub fn set_status_code(&mut self, status_code: usize) {
+        self.status_code = status_code;
     }
 
     pub fn set_status_message(&mut self, status_message: &str) {
         self.status_message = status_message.to_string();
+    }
+
+    pub fn set_contents(&mut self, content_type: &str, content: &str) {
+        self.content_type = Some(content_type.to_string());
+        self.content = Some(content.to_string());
     }
 
     pub fn set_content_type(&mut self, content_type: &str) {
