@@ -55,11 +55,9 @@ impl Worker {
             thread: Some(thread::spawn(move || loop {
                 match receiver.lock().unwrap().recv() {
                     Ok(job) => {
-                        println!("Worker {_id} got a job; executing.");
                         job();
                     }
                     Err(_) => {
-                        println!("Worker {_id} got a shutdown message.");
                         break;
                     }
                 }
