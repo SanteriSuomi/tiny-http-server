@@ -1,7 +1,8 @@
-use crate::communication::method::Method;
 use crate::communication::request::{Request, StaticRequestData};
 
 use crate::communication::response::Response;
+use crate::communication::router::Router;
+use crate::ds::trie::Trie;
 use crate::log;
 use crate::log::logger::Logger;
 use crate::utils::file::get_first_html_file_name;
@@ -9,7 +10,6 @@ use crate::utils::general::is_static_file;
 use crate::utils::guess::guess_mime_type;
 use crate::utils::thread_pool::ThreadPool;
 
-use std::collections::HashMap;
 use std::env::current_dir;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -22,14 +22,9 @@ use std::sync::{Arc, Mutex};
 pub struct Server {
     thread_pool: ThreadPool,
     listener: TcpListener,
-    route_map: Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
+    routers: Arc<Mutex<Trie<Router>>>,
     _address: String,
     root_path: String,
-}
-
-#[derive(Clone)]
-struct Route {
-    func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
 }
 
 // Represents the server address, which is a tuple of an IP address and a port.
@@ -58,7 +53,7 @@ impl Server {
                 return Ok(Server {
                     thread_pool: ThreadPool::new(5),
                     listener,
-                    route_map: Arc::new(Mutex::new(HashMap::new())),
+                    routers: Arc::new(Mutex::new(Trie::new())),
                     _address,
                     root_path: current_dir().unwrap_or_default().display().to_string(),
                 });
@@ -71,15 +66,14 @@ impl Server {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("Server started");
         for stream in self.listener.incoming() {
-            let map = self.route_map.clone();
+            let routers = self.routers.clone();
             match stream {
                 Ok(stream) => {
                     self.thread_pool
                         .execute(move || match Request::build_request(&stream) {
                             Ok(mut request) => {
-                                Self::handle_loop(&map, &stream, &mut request);
+                                Self::handle_loop(&routers, &stream, &mut request);
                             }
                             Err(e) => log!("Request Error: {:#?}", e),
                         });
@@ -94,14 +88,10 @@ impl Server {
     }
 
     // Execute main request-response "loop" logic for the server.
-    fn handle_loop(
-        route_map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
-        stream: &TcpStream,
-        request: &mut Request,
-    ) {
+    fn handle_loop(routers: &Arc<Mutex<Trie<Router>>>, stream: &TcpStream, request: &mut Request) {
         Self::check_static_request(request);
         let mut response = Response::new();
-        Self::match_route(route_map, request, &mut response);
+        Self::match_router(routers, request, &mut response);
         log!("Request: {:#?}", request);
         if let Err(e) = response.send(stream) {
             log!("Response Error: {:#?}", e);
@@ -138,56 +128,34 @@ impl Server {
     }
 
     // Static method to match the request to the correct route, and then call the possible user registered function found on that route.
-    fn match_route(
-        map: &Arc<Mutex<HashMap<String, HashMap<Method, Route>>>>,
+    fn match_router(
+        routers: &Arc<Mutex<Trie<Router>>>,
         request: &Request,
         response: &mut Response,
     ) {
-        if let Some(user_request) = map
+        if let Some(route) = routers
             .lock()
             .unwrap()
-            .get(&request.path)
-            .and_then(|routes| routes.get(&request.method))
+            .search(&request.path)
+            .and_then(|router| router.get_route(request))
         {
-            (user_request.func)(request, response);
+            (route.func)(request, response);
         }
     }
 
-    // Create a route for the server.
-    pub fn route<F>(&mut self, path: &str, method: &str, func: F)
-    where
-        F: Fn(&Request, &mut Response) -> () + Send + Sync + 'static,
-    {
-        assert!(path != "/static", "Cannot register route for static path.");
-        self.create_route(path, method, func);
-    }
-
-    // Register a route with the server.
-    fn create_route<F>(&mut self, path: &str, method: &str, func: F)
-    where
-        F: Fn(&Request, &mut Response) -> () + Send + Sync + 'static,
-    {
-        match Method::from_str(method) {
-            Ok(method) => {
-                let mut route_map = self.route_map.lock().unwrap();
-                let method_map = route_map
-                    .entry(path.to_string())
-                    .or_insert_with(HashMap::new);
-                method_map.insert(
-                    method,
-                    Route {
-                        func: Arc::new(func),
-                    },
-                );
-            }
-            Err(e) => log!("Method Error: {:#?}", e),
-        }
+    // Register a router with the server. Routers are used to group routes together.
+    pub fn router(&mut self, router: Router) {
+        self.routers
+            .lock()
+            .unwrap()
+            .insert(router.base_path.clone().as_str(), router);
     }
 
     // Register a route with the server that serves static files from a directory starting from project root.
     pub fn serve_static(&mut self, dir: &str) {
         let root_path = format!("{}\\{}", self.root_path, dir);
-        self.create_route("/static", "GET", move |request, response| {
+        let mut router = Router::new("/static");
+        router.route("", "GET", move |request, response| {
             if let Some((path, extension)) = Self::get_static_file_details(request, &root_path) {
                 match read_to_string(path) {
                     Ok(file_content) => {
@@ -200,6 +168,7 @@ impl Server {
                 }
             }
         });
+        self.router(router);
     }
 
     fn get_static_file_details(request: &Request, root_path: &str) -> Option<(String, String)> {
