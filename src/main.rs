@@ -2,6 +2,7 @@ use tiny_rust_server::communication::router::Router;
 use tiny_rust_server::server::Server;
 
 fn main() {
+    // Create a new server instance at localhost, port 5000
     match Server::new((127, 0, 0, 1), 5000) {
         Ok(mut server) => {
             // Serve static files from the "public" folder at project root
@@ -26,9 +27,9 @@ fn main() {
             println!("Server started");
             match server.run() {
                 Ok(_) => println!("Server shutdown"),
-                Err(e) => println!("Server Error: {:#?}", e),
+                Err(e) => println!("Server Run Error: {:#?}", e),
             }
         }
-        Err(e) => println!("Error: {:#?}", e),
+        Err(e) => println!("Server Initialization Error: {:#?}", e),
     }
 }
