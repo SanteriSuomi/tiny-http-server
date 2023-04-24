@@ -130,17 +130,16 @@ impl Server {
     // Static method to match the request to the correct route, and then call the possible user registered function found on that route.
     fn match_router(
         routers: &Arc<Mutex<Trie<Router>>>,
-        request: &Request,
+        request: &mut Request,
         response: &mut Response,
     ) {
-        if let Some(route) = routers
-            .lock()
-            .unwrap()
-            .search(&request.path)
-            .and_then(|router| router.get_route(request))
-        {
-            (route.func)(request, response);
-        }
+        routers.lock().unwrap().search(&request.path).map(|router| {
+            router.execute_middleware(request);
+            router
+                .find_route(request)
+                .and_then(|route| route.method_map.get(&request.method).cloned())
+                .map(|func| (func)(request, response));
+        });
     }
 
     // Register a router with the server. Routers are used to group routes together.

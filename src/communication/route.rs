@@ -1,8 +1,22 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use super::{request::Request, response::Response};
+use super::{method::Method, request::Request, response::Response};
+
+// User defined function type found at every defined route (path)
+pub type RouteFunc = Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>;
 
 #[derive(Clone)]
 pub struct Route {
-    pub func: Arc<dyn Fn(&Request, &mut Response) -> () + Send + Sync + 'static>,
+    pub method_map: HashMap<Method, RouteFunc>,
+}
+
+impl Route {
+    pub fn new(method_map: Option<HashMap<Method, RouteFunc>>) -> Self {
+        match method_map {
+            Some(m) => Self { method_map: m },
+            None => Self {
+                method_map: HashMap::new(),
+            },
+        }
+    }
 }
